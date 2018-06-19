@@ -1,7 +1,6 @@
- # calc3.py
+# calc3.py
 """Calculator Program that stores the structure of its statements in an AST
 
-**Mostly works but does not support left associative...**
 Example Usage: 
 	> x = 5
 	> y = 6
@@ -54,22 +53,32 @@ class Calc:
 				x
 				5
 		"""
-
-		#Replaces all variables with its dictionary value
-		for idx, t in enumerate(tokens): 
-			if t in self.variables: 
-				tokens[idx] = self.variables[t]
-
 		if len(tokens) == 1:
 			# User input is a numeric value (5) or some variable (x)
 			return tokens[0]
 		elif tokens[1] == "=":
 			try: 
-				self.assign(tokens[0], EqExpr(tokens[2::]).val) # x=5+6  -> Expr(5 + 6)
+				identifier = tokens[0]
+				print(identifier)
+				tokens = self.replace_vars(tokens[2::])
+				self.assign(identifier, Expr(tokens).val) # x=5+6  -> Expr(5 + 6)
 			except:
 				raise SyntaxError("Syntax Error in assignment of variable: {}".format(tokens[0]))
 		else: 
-			return EqExpr(tokens) # 5 + 6 -> Expr(5 + 6)
+			tokens = self.replace_vars(tokens)
+			return Expr(tokens) # 5 + 6 -> Expr(5 + 6)
+
+
+	def replace_vars(self,tokens):
+		"""Replaces all variables in tokens with its dictionary value
+		Ex: ['x', '+', '2', - 'j'] -> ['3', '+', '2', - '4']
+			Returns the new list of tokens
+		"""
+		for idx, t in enumerate(tokens): 
+			if t in self.variables: 
+				tokens[idx] = self.variables[t]
+		return tokens
+
 
 
 	@staticmethod
@@ -99,6 +108,9 @@ class Expr:
 	All subclasses have a self.val that evaluates to some numeric/boolean value
 	
 	"""
+
+	def __init__(self, tokens):
+		self.val = EqExpr(tokens).val
 
 	@staticmethod
 	def isNum(val):
@@ -146,27 +158,18 @@ class EqExpr(Expr):
 	def __init__(self, tokens):
 
 		print("EqExpr", tokens)
-		rel_expr = RelExpr(tokens)
+		self.val = RelExpr(tokens).val
 
-		if len(tokens) < 1: 
-			self.val = rel_expr.val
-			return
-
-		op = tokens[0]
-
-		if op == '!': #tokens splits '!=' to '!' and '='
+		if tokens[0] == '!': #tokens splits '!=' to '!' and '='
 			tokens.pop(0)
 			tokens.pop(0)
-			eq_expr = EqExpr(tokens)
-			self.val = rel_expr != eq_expr
+			self.val = self != EqExpr(tokens)
 			
-		elif op == '=':
+		elif tokens[0] == '=':
 			tokens.pop(0)
 			tokens.pop(0)
-			eq_expr = EqExpr(tokens)
-			self.val = rel_expr == eq_expr
-		else:
-			self.val = rel_expr.val
+			self.val = self == EqExpr(tokens)
+
 		print("eq self.val", self.val)
 
 class RelExpr(Expr): 
@@ -176,36 +179,26 @@ class RelExpr(Expr):
 	def __init__(self,tokens):
 
 		print("RelExpr", tokens)
-		add_expr = AddExpr(tokens)
+		self.val = AddExpr(tokens).val
 
-		if len(tokens) < 1:
-			self.val = add_expr.val
-			return
-
-		op = tokens[0]
-		if op == '>':
+		if tokens[0] == '>':
 			if tokens[1] == '=': # >=
 				tokens.pop(0)
 				tokens.pop(0)
-				rel_expr = RelExpr(tokens)
-				self.val = add_expr >= rel_expr
+				self.val = self >= RelExpr(tokens)
 			else:
 				tokens.pop(0)
-				rel_expr = RelExpr(tokens)
-				self.val = add_expr > rel_expr
+				self.val = self > RelExpr(tokens)
 
-		elif op == '<': 
+		elif tokens[0] == '<': 
 			if tokens[1] == '=':
 				tokens.pop(0)
 				tokens.pop(0)
-				rel_expr = RelExpr(tokens)
-				self.val = add_expr <= rel_expr
+				self.val = self <= RelExpr(tokens)
 			else:
 				tokens.pop(0)
-				rel_expr = RelExpr(tokens)
-				self.val = add_expr < rel_expr
-		else:
-			self.val = add_expr.val
+				self.val = self < RelExpr(tokens)
+
 		print("rel self.val", self.val)
 
 class AddExpr(Expr):
@@ -213,24 +206,19 @@ class AddExpr(Expr):
 	"""
 	def __init__(self,tokens):
 		print("AddExpr", tokens)
-		mul_expr = MulExpr(tokens)
+		self.val = MulExpr(tokens).val
 
-		if len(tokens) < 1:
-			self.val = mul_expr.val
-			return
 
-		op = tokens[0]
-		if op == '+':
-			tokens.pop(0)
-			add_expr = AddExpr(tokens)
-			self.val = mul_expr + add_expr
+		while tokens[0] == '+' or tokens[0] == '-':
 
-		elif op == '-':
-			tokens.pop(0)
-			add_expr = AddExpr(tokens)
-			self.val = mul_expr - add_expr
-		else:
-			self.val = mul_expr.val
+			if tokens[0] == '+':
+				tokens.pop(0)
+				self.val = self + MulExpr(tokens)
+
+			elif tokens[0] == '-':
+				tokens.pop(0)
+				self.val = self - MulExpr(tokens)
+		
 		print("add self.val", self.val)
 
 
@@ -240,23 +228,18 @@ class MulExpr(Expr):
 	"""
 	def __init__(self,tokens):
 		print("MulExpr", tokens)
-		fac = Factor(tokens)
 
-		if len(tokens) < 1:
-			self.val = fac.val
-			return
+		self.val = Factor(tokens).val
 
-		op = tokens[0]
-		if op == '*':
-			tokens.pop(0)
-			mul_expr = MulExpr(tokens)
-			self.val = fac * mul_expr
-		elif op == '/':
-			tokens.pop(0)
-			mul_expr = MulExpr(tokens)
-			self.val = fac / mul_expr
-		else:
-			self.val = fac.val
+		while tokens[0] == '*' or tokens[0] == '/':
+
+			if tokens[0] == '*':
+				tokens.pop(0)
+				self.val = self * Factor(tokens)
+			elif tokens[0] == '/':
+				tokens.pop(0)
+				self.val = self / Factor(tokens)
+
 		print("mul self.val", self.val)
 			
 
@@ -265,12 +248,14 @@ class Factor(Expr):
 	def __init__(self,tokens):
 		print("Factor", tokens)
 		self.negflag = False
-		if len(tokens) == 1:
-			self.val = float(tokens[0])
-			return
+
 		if tokens[0] == '-':
 			self.negflag = True
 			tokens.pop(0) # consume '-'
+
+		if len(tokens) == 1:
+			self.val = self.sign(float(tokens[0]))
+			return
 
 		if tokens[0] == '(':
 			tokens.pop(0)
@@ -286,7 +271,7 @@ class Factor(Expr):
 	def sign(self, val):
 		"""Handle negative numbers or expressions"""
 		if self.negflag == True:
-			return (-val)
+			return -val
 		else:
 			return val
 
